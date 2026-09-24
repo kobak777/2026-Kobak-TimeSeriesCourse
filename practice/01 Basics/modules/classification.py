@@ -2,6 +2,7 @@ import numpy as np
 
 from modules.metrics import *
 from modules.utils import z_normalize
+from typing import Self
 
 
 default_metrics_params = {'euclidean': {'normalize': True},
@@ -52,60 +53,61 @@ class TimeSeriesKNN:
     def _distance(self, x_train: np.ndarray, x_test: np.ndarray) -> float:
         """
         Compute distance between the train and test samples
-        
-        Parameters
-        ----------
-        x_train: sample of the train set
-        x_test: sample of the test set
-        
-        Returns
-        -------
-        dist: distance between the train and test samples
         """
+        # Применяем z-нормализацию, если это указано в параметрах метрики
+        if self.metric_params.get('normalize', False):
+            x_train = z_normalize(x_train)
+            x_test = z_normalize(x_test)
 
-        dist = 0
+        if self.metric == 'euclidean':
+            # Если передана нормализация, можно использовать norm_ED_distance или ED_distance на нормированных
+            if self.metric_params.get('normalize', False):
+                dist = ED_distance(x_train, x_test)
+            else:
+                dist = ED_distance(x_train, x_test)
+        elif self.metric == 'dtw':
+            # Извлекаем параметр r для DTW, если он задан
+            r = self.metric_params.get('r', None)
+            if r is not None:
+                dist = DTW_distance(x_train, x_test, r=r)
+            else:
+                dist = DTW_distance(x_train, x_test)
+        else:
+            raise ValueError(f"Unknown metric: {self.metric}")
 
-        # INSERT YOUR CODE
-
-        return dist
-
+        return float(dist)
 
     def _find_neighbors(self, x_test: np.ndarray) -> list[tuple[float, int]]:
         """
         Find the k nearest neighbors of the test sample
-
-        Parameters
-        ----------
-        x_test: sample of the test set
-        
-        Returns
-        -------
-        neighbors: k nearest neighbors (distance between neighbor and test sample, neighbor label) for test sample
         """
+        distances = []
+        for i in range(len(self.X_train)):
+            d = self._distance(self.X_train[i], x_test)
+            distances.append((d, self.Y_train[i]))
 
-        neighbors = []
+        # Сортируем по возрастанию расстояния
+        distances.sort(key=lambda x: x[0])
 
-        # INSERT YOUR CODE
+        # Берем k ближайших соседей
+        neighbors = distances[:self.n_neighbors]
 
         return neighbors
-
 
     def predict(self, X_test: np.ndarray) -> np.ndarray:
         """
         Predict the class labels for samples of the test set
-
-        Parameters
-        ----------
-        X_test: test set with shape (ts_number, ts_length))
-
-        Returns
-        -------
-        y_pred: class labels for each data sample from test set
         """
-
         y_pred = []
 
-        # INSERT YOUR CODE
+        for x_test in X_test:
+            neighbors = self._find_neighbors(x_test)
+            # Извлекаем метки классов соседей
+            labels = [label for _, label in neighbors]
+
+            # Находим наиболее часто встречающийся класс (мажоритарное голосование)
+            predicted_class = max(set(labels), key=labels.count)
+            y_pred.append(predicted_class)
 
         return np.array(y_pred)
 

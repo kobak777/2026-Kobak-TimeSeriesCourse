@@ -32,7 +32,19 @@ class Image2TimeSeries:
         prep_img: image after preprocessing
         """
 
-        # INSERT YOUR CODE
+        if len(img.shape) == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img.copy()
+
+        # Шаг 2: Инверсия цвета (инвертируем черное и белое)
+        inverted = cv2.bitwise_not(gray)
+
+        # Шаг 3: Размытие изображения для удаления шума
+        blurred = cv2.GaussianBlur(inverted, (5, 5), 0)
+
+        # Шаг 4: Бинаризация (преобразование в строго черно-белое)
+        _, prep_img = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
 
         return prep_img
 

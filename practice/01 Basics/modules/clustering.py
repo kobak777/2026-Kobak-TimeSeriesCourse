@@ -66,7 +66,21 @@ class TimeSeriesHierarchicalClustering:
         self: the fitted model
         """
 
-       # INSERT YOUR CODE
+        self.model = AgglomerativeClustering(
+            n_clusters=self.n_clusters,
+            metric='precomputed',  # В некоторых старых версиях sklearn параметр может называться 'affinity'
+            linkage=self.method,
+            compute_distances=True
+        )
+
+        # Обучаем модель
+        self.model.fit(distance_matrix)
+
+        # СОХРАНЯЕМ МЕТКИ (этой строчки не хватало, из-за чего была ошибка)
+        self.labels_ = self.model.labels_
+
+        # Создаем матрицу связей для построения дендрограммы
+        self.linkage_matrix = self._create_linkage_matrix()
 
         return self
 
