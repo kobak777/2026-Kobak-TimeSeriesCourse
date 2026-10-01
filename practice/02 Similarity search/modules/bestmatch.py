@@ -153,8 +153,23 @@ class NaiveBestMatchFinder(BestMatchFinder):
             'index' : [],
             'distance' : []
         }
-        
-        # INSERT YOUR CODE
+
+        for i in range(N):
+            subsequence = ts_data[i]
+
+            if self.is_normalize:
+                dist = DTW_distance(z_normalize(subsequence), z_normalize(query), self.r)
+            else:
+                dist = DTW_distance(subsequence, query, self.r)
+
+            dist_profile[i] = dist
+            if dist < bsf:
+                bsf = dist
+
+        topK_results = topK_match(dist_profile, excl_zone, self.topK)
+
+        bestmatch['index'] = topK_results['indices']
+        bestmatch['distances'] = topK_results['distances']
 
         return bestmatch
 
@@ -198,8 +213,16 @@ class UCR_DTW(BestMatchFinder):
         """
 
         lb_Kim = 0
-        
-        # INSERT YOUR CODE
+
+        subs1 = np.asarray(subs1, dtype=float).ravel()
+        subs2 = np.asarray(subs2, dtype=float).ravel()
+
+        if len(subs1) != len(subs2):
+            raise ValueError("Подпоследовательности должны иметь одинаковую длину.")
+
+        if len(subs1) > 0:
+            lb_Kim = (subs1[0] - subs2[0]) ** 2
+            lb_Kim += (subs1[-1] - subs2[-1]) ** 2
 
         return lb_Kim
 
@@ -221,7 +244,24 @@ class UCR_DTW(BestMatchFinder):
 
         lb_Keogh = 0
 
-        # INSERT YOUR CODE
+        subs1 = np.asarray(subs1, dtype=float).ravel()
+        subs2 = np.asarray(subs2, dtype=float).ravel()
+
+        if len(subs1) != len(subs2):
+            raise ValueError("Подпоследовательности должны иметь одинаковую длину.")
+
+        radius = max(0, int(r))
+
+        for i, value in enumerate(subs1):
+            left = max(0, i - radius)
+            right = min(len(subs2), i + radius + 1)
+            lower = np.min(subs2[left:right])
+            upper = np.max(subs2[left:right])
+
+            if value > upper:
+                lb_Keogh += (value - upper) ** 2
+            elif value < lower:
+                lb_Keogh += (value - lower) ** 2
 
         return lb_Keogh
 
@@ -275,6 +315,98 @@ class UCR_DTW(BestMatchFinder):
             'distance' : []
         }
 
-        # INSERT YOUR CODE
+        query = np.asarray(query, dtype=float).ravel()
+        windows = np.asarray(ts_data, dtype=float)
+
+        if self.is_normalize:
+            std = np.std(query)
+            query = (
+                np.zeros_like(query, dtype=float)
+                if std == 0
+                else (query - np.mean(query)) / std
+            )
+
+            normalized_windows = []
+            for window in windows:
+                std = np.std(window)
+                normalized_windows.append(
+                    np.zeros_like(window, dtype=float)
+                    if std == 0
+                    else (window - np.mean(window)) / std
+                )
+            windows = np.asarray(normalized_windows)
+
+        radius = min(int(self.r * m), m - 1)
+        active = np.ones(N, dtype=bool)
+
+        self.not_pruned_num = 0
+        self.lb_Kim_num = 0
+        self.lb_KeoghQC_num = 0
+        self.lb_KeoghCQ_num = 0
+
+        for _ in range(min(max(int(self.topK), 0), N)):
+            bsf = np.inf
+            dist_profile[:] = np.inf
+
+            for i in range(N):
+                if not active[i]:
+                    continue
+
+                candidate = windows[i]
+
+                lb = self._LB_Kim(query, candidate)
+                if lb > bsf:
+                    self.lb_Kim_num += 1
+                    continue
+
+                # QC: запрос относительно envelope кандидата.
+                lb = self._LB_Keogh(query, candidate, radius)
+                if lb > bsf:
+                    self.lb_KeoghQC_num += 1
+                    continue
+
+                # CQ: кандидат относительно envelope запроса.
+                lb = self._LB_Keogh(candidate, query, radius)
+                if lb > bsf:
+                    self.lb_KeoghCQ_num += 1
+                    continue
+
+                self.not_pruned_num += 1
+
+                # DTW с окном Sakoe–Chiba.
+                previous = np.full(m + 1, np.inf)
+                previous[0] = 0.0
+
+                for row in range(1, m + 1):
+                    current = np.full(m + 1, np.inf)
+                    start = max(1, row - radius)
+                    end = min(m, row + radius)
+
+                    for col in range(start, end + 1):
+                        cost = (query[row - 1] - candidate[col - 1]) ** 2
+                        current[col] = cost + min(
+                            previous[col],
+                            current[col - 1],
+                            previous[col - 1],
+                        )
+
+                    previous = current
+
+                distance = previous[m]
+                dist_profile[i] = distance
+
+                if distance < bsf:
+                    bsf = distance
+
+            if not np.isfinite(bsf):
+                break
+
+            best_index = int(np.argmin(dist_profile))
+            bestmatch["index"].append(best_index)
+            bestmatch["distance"].append(float(dist_profile[best_index]))
+
+            left = max(0, best_index - excl_zone)
+            right = min(N, best_index + excl_zone + 1)
+            active[left:right] = False
 
         return bestmatch

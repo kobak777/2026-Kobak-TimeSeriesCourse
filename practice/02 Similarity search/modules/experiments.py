@@ -57,17 +57,17 @@ def _run_experiment_dist_profile(algorithm: str, data: dict, exp_params: dict, a
             match algorithm:
                 case 'brute_force':
                     runtime_code = f"brute_force(data['ts']['{n}'], data['query']['{m}'])"
-                case 'mass3': 
+                case 'mass3':
                     runtime_code = f"mts.mass3(data['ts']['{n}'], data['query']['{m}'], alg_params['segment_len'])"
                 case 'mass' | 'mass2':
-                    runtime_code = f"mts.{algorithm}(data['ts']['{n}'], data['query']['{m}'])"    
+                    runtime_code = f"mts.{algorithm}(data['ts']['{n}'], data['query']['{m}'])"
             try:
                 time = timeit.timeit(stmt=runtime_code, number=1, globals={**globals(), **locals()})
             except:
                 time = np.nan
 
             times.append(time)
-    
+
     return np.array(times)
 
 
